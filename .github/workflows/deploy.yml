@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 jobs:
   deploy:
@@ -75,29 +75,33 @@ jobs:
           target: "~/deploy"
 
       # 8) SSH로 VM에서 배포 실행
-      - name: SSH deploy to VM
+      - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           envs: |
-            GHCR_PAT=${{ secrets.GHCR_PAT }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_USER=${{ secrets.DB_USER }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            GHCR_PAT
+            DB_NAME
+            DB_USER
+            DB_PASSWORD
+            NEXT_PUBLIC_API_URL
           script: |
-            # GHCR login (non‑TTY)
+            # non‑TTY GHCR login
             echo "$GHCR_PAT" \
               | docker login ghcr.io \
                   -u "${{ github.actor }}" \
                   --password-stdin
 
-            # deploy 디렉터리로 이동
+            # 이동 후 .env 생성
             cd ~/deploy
-
-            # .env 파일 생성
             cat > .env <<EOF
             NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
             DB_NAME=$DB_NAME
@@ -105,6 +109,6 @@ jobs:
             DB_PASSWORD=$DB_PASSWORD
             EOF
 
-            # 이미지 Pull & 컨테이너 재시작
+            # Pull & 업
             docker compose pull
             docker compose up -d --no-build
