@@ -3,41 +3,66 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      # 1) 배포용 레포 체크아웃 (todo-deploy)
+      - name: Checkout deploy repo
         uses: actions/checkout@v4
+        with:
+          path: deploy
 
+      # 2) 프론트엔드 레포 체크아웃
+      - name: Checkout frontend repo
+        uses: actions/checkout@v4
+        with:
+          repository: hc-organizations/todo-frontend
+          path: deploy/todo-frontend
+          token: ${{ secrets.GHCR_PAT }} # 또는 REPO_PAT
+
+      # 3) 백엔드 레포 체크아웃
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          repository: hc-organizations/todo-backend
+          path: deploy/todo-backend
+          token: ${{ secrets.GHCR_PAT }}
+
+      # 4) GHCR 로그인
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
-          # registry username에는 GitHub 계정(닉네임) 입력, GHCR_PAT는
-          # org(hc-organizations) 쓰기 권한이 있는 Personal Access Token
 
+      # 5) 프론트엔드 이미지 빌드·푸시
       - name: Build & push frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./todo-frontend
+          context: deploy/todo-frontend
           push: true
           tags: |
             ghcr.io/hc-organizations/todo-frontend:latest
             ghcr.io/hc-organizations/todo-frontend:${{ github.sha }}
 
+      # 6) 백엔드 이미지 빌드·푸시
       - name: Build & push backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./todo-backend
+          context: deploy/todo-backend
           push: true
           tags: |
             ghcr.io/hc-organizations/todo-backend:latest
             ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
 
+      # 7) VM에 SSH 배포
       - name: SSH deploy to VM
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -51,12 +76,10 @@ jobs:
             cd ~/deploy
             git pull origin main
 
-            # 환경변수 세팅
             export DB_NAME=${{ secrets.DB_NAME }}
             export DB_USER=${{ secrets.DB_USER }}
             export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             export NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
 
-            # 이미지 Pull & Compose Up
             docker compose pull
             docker compose up -d --no-build
