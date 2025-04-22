@@ -10,93 +10,49 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # 1) 배포용 레포(Compose 파일 등) 체크아웃
-      - name: Checkout deploy repo
-        uses: actions/checkout@v4
+      # 1) 배포용 레포(Compose 파일 등) 체크아웃 — Runner
+      - uses: actions/checkout@v4
         with:
           path: deploy
 
-      # 2) 프론트엔드 레포 체크아웃
-      - name: Checkout frontend repo
-        uses: actions/checkout@v4
-        with:
-          repository: hc-organizations/todo-frontend
-          path: deploy/todo-frontend
-          token: ${{ secrets.GHCR_PAT }}
+      # (… frontend/backend 체크아웃, 빌드&푸시 생략 …)
 
-      # 3) 백엔드 레포 체크아웃
-      - name: Checkout backend repo
-        uses: actions/checkout@v4
-        with:
-          repository: hc-organizations/todo-backend
-          path: deploy/todo-backend
-          token: ${{ secrets.GHCR_PAT }}
-
-      # 4) GHCR 로그인 (Actions Runner)
-      - name: Log in to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
-
-      # 5) 프론트엔드 이미지 빌드·푸시
-      - name: Build & push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: deploy/todo-frontend
-          push: true
-          tags: |
-            ghcr.io/hc-organizations/todo-frontend:latest
-            ghcr.io/hc-organizations/todo-frontend:${{ github.sha }}
-
-      # 6) 백엔드 이미지 빌드·푸시
-      - name: Build & push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: deploy/todo-backend
-          push: true
-          tags: |
-            ghcr.io/hc-organizations/todo-backend:latest
-            ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
-
-      # 7) VM에 파일 복사 (scp) — 옵션
-      - name: Copy deploy dir to VM
-        uses: appleboy/scp-action@v0.1.5
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          source: "deploy/"
-          target: "~/deploy"
-
-      # 8) SSH로 VM 배포
-      - name: SSH deploy to VM
+      # 7) VM에 SSH 배포
+      - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          # 리모트 환경변수 전달
           envs: |
             GHCR_PAT=${{ secrets.GHCR_PAT }}
             DB_NAME=${{ secrets.DB_NAME }}
             DB_USER=${{ secrets.DB_USER }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
-          script: |
-            # 1) 디렉터리 보장
-            mkdir -p ~/deploy
-            cd ~/deploy
+        script: |
+          # 0) git 설치 (Ubuntu 예시)
+          sudo apt-get update
+          sudo apt-get install -y git
 
-            # 2) GHCR 로그인 (non‑TTY)
-            echo "$GHCR_PAT" \
-              | docker login ghcr.io \
-                -u ${{ github.actor }} \
-                --password-stdin
+          # 1) 배포 디렉터리 준비
+          mkdir -p ~/deploy
+          cd ~/deploy
 
-            # 3) Compose Pull & Up
-            docker compose pull
-            docker compose up -d --no-build
+          # 2) repo clone or pull
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/hc-organizations/deploy-repo.git .
+          else
+            git pull origin main
+          fi
+
+          # 3) GHCR 로그인 (non‑TTY)
+          echo "$GHCR_PAT" \
+            | docker login ghcr.io \
+              -u ${{ github.actor }} \
+              --password-stdin
+
+          # 4) 이미지 Pull & Compose Up
+          docker compose pull
+          docker compose up -d --no-build
