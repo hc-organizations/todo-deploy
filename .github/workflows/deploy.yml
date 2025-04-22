@@ -4,112 +4,50 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  packages: read
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) 배포용 레포(Compose 파일 등) 체크아웃
-      - name: Checkout deploy repo
-        uses: actions/checkout@v4
-        with:
-          path: deploy
-
-      # 2) Frontend 코드 체크아웃
-      - name: Checkout frontend repo
-        uses: actions/checkout@v4
-        with:
-          repository: hc-organizations/todo-frontend
-          path: deploy/todo-frontend
-          token: ${{ secrets.GHCR_PAT }}
-
-      # 3) Backend 코드 체크아웃
-      - name: Checkout backend repo
-        uses: actions/checkout@v4
-        with:
-          repository: hc-organizations/todo-backend
-          path: deploy/todo-backend
-          token: ${{ secrets.GHCR_PAT }}
-
-      # 4) GHCR 로그인 (Actions Runner)
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
-
-      # 5) Frontend 이미지 빌드∙푸시
-      - name: Build & push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: deploy/todo-frontend
-          push: true
-          tags: |
-            ghcr.io/hc-organizations/todo-frontend:latest
-            ghcr.io/hc-organizations/todo-frontend:${{ github.sha }}
-
-      # 6) Backend 이미지 빌드∙푸시
-      - name: Build & push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: deploy/todo-backend
-          push: true
-          tags: |
-            ghcr.io/hc-organizations/todo-backend:latest
-            ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
-
-      # 7) SCP로 deploy/ 전체를 VM에 복사
-      - name: Copy deploy folder to VM
-        uses: appleboy/scp-action@v0.1.5
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          source: deploy/
-          target: ~/deploy
-
-      # 8) SSH로 VM에서 배포 실행
-      - name: Deploy to VM via SSH
+      - name: SSH deploy to VM
         uses: appleboy/ssh-action@v1
-        env:
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          envs: |
-            GHCR_PAT
-            DB_NAME
-            DB_USER
-            DB_PASSWORD
-            NEXT_PUBLIC_API_URL
           script: |
-            # 1) non‑TTY 환경 GHCR 로그인
-            echo "$GHCR_PAT" \
-              | sudo docker login ghcr.io \
-                  -u "${{ github.actor }}" \
-                  --password-stdin
-
-            # 2) 배포 디렉터리로 이동
+            # 2) 디렉터리 준비
+            mkdir -p ~/deploy
             cd ~/deploy
 
-            # 3) .env 파일 생성
+            # 3) 배포 레포 (docker-compose.yml) 클론 또는 pull
+            if [ ! -f docker-compose.yml ]; then
+              git clone https://github.com/hc-organizations/todo-deploy.git .
+            else
+              git pull origin main
+            fi
+
+            # 4) Frontend 소스 클론 또는 pull
+            if [ ! -d todo-frontend ]; then
+              git clone https://github.com/hc-organizations/todo-frontend.git todo-frontend
+            else
+              cd todo-frontend && git pull origin main && cd ..
+            fi
+
+            # 5) Backend 소스 클론 또는 pull
+            if [ ! -d todo-backend ]; then
+              git clone https://github.com/hc-organizations/todo-backend.git todo-backend
+            else
+              cd todo-backend && git pull origin main && cd ..
+            fi
+
+            # 6) 환경변수 파일(.env) 생성
             cat > .env <<EOF
-            NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-            DB_NAME=$DB_NAME
-            DB_USER=$DB_USER
-            DB_PASSWORD=$DB_PASSWORD
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             EOF
 
-            # 4) 이미지 Pull & 컨테이너 재시작
-            sudo docker compose pull
-            sudo docker compose up -d --no-build
+            # 7) Docker Compose로 이미지 빌드 & 배포
+            sudo docker compose up -d --build

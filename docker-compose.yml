@@ -1,6 +1,7 @@
 services:
   frontend:
-    image: ghcr.io/hc-organizations/todo-frontend:latest
+    build:
+      context: ./todo-frontend
     ports:
       - "3000:3000"
     environment:
@@ -10,7 +11,8 @@ services:
       - backend
 
   backend:
-    image: ghcr.io/hc-organizations/todo-backend:latest
+    build:
+      context: ./todo-backend
     ports:
       - "8000:8000"
     extra_hosts:
