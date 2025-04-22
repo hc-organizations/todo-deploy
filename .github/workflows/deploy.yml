@@ -1,0 +1,62 @@
+name: Deploy to Azure VM
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+          # registry username에는 GitHub 계정(닉네임) 입력, GHCR_PAT는
+          # org(hc-organizations) 쓰기 권한이 있는 Personal Access Token
+
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./todo-frontend
+          push: true
+          tags: |
+            ghcr.io/hc-organizations/todo-frontend:latest
+            ghcr.io/hc-organizations/todo-frontend:${{ github.sha }}
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./todo-backend
+          push: true
+          tags: |
+            ghcr.io/hc-organizations/todo-backend:latest
+            ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
+
+      - name: SSH deploy to VM
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            # VM에서 GHCR 인증
+            echo $GHCR_PAT | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            cd ~/deploy
+            git pull origin main
+
+            # 환경변수 세팅
+            export DB_NAME=${{ secrets.DB_NAME }}
+            export DB_USER=${{ secrets.DB_USER }}
+            export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            export NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+
+            # 이미지 Pull & Compose Up
+            docker compose pull
+            docker compose up -d --no-build
