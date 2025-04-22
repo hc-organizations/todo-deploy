@@ -1,4 +1,3 @@
-# .github/workflows/deploy.yml
 name: Deploy to Azure VM
 on:
   push:
@@ -20,7 +19,7 @@ jobs:
         with:
           path: deploy
 
-      # 2) 프론트엔드 레포 체크아웃
+      # 2) Frontend 코드 체크아웃
       - name: Checkout frontend repo
         uses: actions/checkout@v4
         with:
@@ -28,7 +27,7 @@ jobs:
           path: deploy/todo-frontend
           token: ${{ secrets.GHCR_PAT }}
 
-      # 3) 백엔드 레포 체크아웃
+      # 3) Backend 코드 체크아웃
       - name: Checkout backend repo
         uses: actions/checkout@v4
         with:
@@ -36,7 +35,7 @@ jobs:
           path: deploy/todo-backend
           token: ${{ secrets.GHCR_PAT }}
 
-      # 4) GHCR 로그인 (Runner 측)
+      # 4) GHCR 로그인 (Actions Runner)
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
@@ -44,7 +43,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      # 5) 프론트엔드 이미지 빌드·푸시
+      # 5) Frontend 이미지 빌드∙푸시
       - name: Build & push frontend image
         uses: docker/build-push-action@v5
         with:
@@ -54,7 +53,7 @@ jobs:
             ghcr.io/hc-organizations/todo-frontend:latest
             ghcr.io/hc-organizations/todo-frontend:${{ github.sha }}
 
-      # 6) 백엔드 이미지 빌드·푸시
+      # 6) Backend 이미지 빌드∙푸시
       - name: Build & push backend image
         uses: docker/build-push-action@v5
         with:
@@ -64,7 +63,7 @@ jobs:
             ghcr.io/hc-organizations/todo-backend:latest
             ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
 
-      # 7) SCP로 deploy/ 폴더 전체를 VM에 복사
+      # 7) SCP로 deploy/ 전체를 VM에 복사
       - name: Copy deploy folder to VM
         uses: appleboy/scp-action@v0.1.5
         with:
@@ -77,27 +76,33 @@ jobs:
       # 8) SSH로 VM에서 배포 실행
       - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           envs: |
-            GHCR_PAT=${{ secrets.GHCR_PAT }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_USER=${{ secrets.DB_USER }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            GHCR_PAT
+            DB_NAME
+            DB_USER
+            DB_PASSWORD
+            NEXT_PUBLIC_API_URL
           script: |
-            # non‑TTY GHCR login
+            # 1) non‑TTY 환경 GHCR 로그인
             echo "$GHCR_PAT" \
-              | docker login ghcr.io \
+              | sudo docker login ghcr.io \
                   -u "${{ github.actor }}" \
                   --password-stdin
 
-            # deploy 디렉터리로 이동
+            # 2) 배포 디렉터리로 이동
             cd ~/deploy
 
-            # .env 파일 생성
+            # 3) .env 파일 생성
             cat > .env <<EOF
             NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
             DB_NAME=$DB_NAME
@@ -105,6 +110,6 @@ jobs:
             DB_PASSWORD=$DB_PASSWORD
             EOF
 
-            # Pull & 컨테이너 재시작
-            docker compose pull
-            docker compose up -d --no-build
+            # 4) 이미지 Pull & 컨테이너 재시작
+            sudo docker compose pull
+            sudo docker compose up -d --no-build
