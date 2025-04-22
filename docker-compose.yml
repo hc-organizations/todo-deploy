@@ -1,24 +1,97 @@
-version: "3.8"
-services:
-  frontend:
-    image: ghcr.io/hc-organizations/todo-frontend:latest
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    depends_on:
-      - backend
+name: Deploy to Azure VM
+on:
+  push:
+    branches:
+      - main
 
-  backend:
-    image: ghcr.io/hc-organizations/todo-backend:latest
-    ports:
-      - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      DB_HOST: host.docker.internal
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_PORT: 5432
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) 배포용 레포(Compose 파일 등) 체크아웃
+      - name: Checkout deploy repo
+        uses: actions/checkout@v4
+        with:
+          path: deploy
+
+      # 2) 프론트엔드 레포 체크아웃
+      - name: Checkout frontend repo
+        uses: actions/checkout@v4
+        with:
+          repository: hc-organizations/todo-frontend
+          path: deploy/todo-frontend
+          token: ${{ secrets.GHCR_PAT }}
+
+      # 3) 백엔드 레포 체크아웃
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          repository: hc-organizations/todo-backend
+          path: deploy/todo-backend
+          token: ${{ secrets.GHCR_PAT }}
+
+      # 4) GHCR 로그인 (Actions Runner 측)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # 여기에는 GitHub 닉네임을 쓰시면 됩니다.
+          password: ${{ secrets.GHCR_PAT }}
+
+      # 5) 프론트엔드 이미지 빌드·푸시
+      - name: Build & push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: deploy/todo-frontend
+          push: true
+          tags: |
+            ghcr.io/hc-organizations/todo-frontend:latest
+            ghcr.io/hc-organizations/todo-frontend:${{ github.sha }}
+
+      # 6) 백엔드 이미지 빌드·푸시
+      - name: Build & push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: deploy/todo-backend
+          push: true
+          tags: |
+            ghcr.io/hc-organizations/todo-backend:latest
+            ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
+
+      # 7) VM에 SSH로 배포
+      - name: SSH deploy to VM
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: |
+            GHCR_PAT=${{ secrets.GHCR_PAT }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+          script: |
+            # 1) Git 설치 (Ubuntu 기준)
+            sudo apt-get update
+            sudo apt-get install -y git
+
+            # 2) 매번 깨끗하게 클론
+            rm -rf ~/deploy
+            git clone https://github.com/hc-organizations/todo-deploy.git ~/deploy
+            cd ~/deploy
+
+            # 3) GHCR 로그인 (non‑TTY)
+            echo "$GHCR_PAT" \
+              | docker login ghcr.io \
+                -u "${{ github.actor }}" \
+                --password-stdin
+
+            # 4) Pull & 업
+            docker compose pull
+            docker compose up -d --no-build
