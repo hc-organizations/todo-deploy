@@ -35,12 +35,12 @@ jobs:
           path: deploy/todo-backend
           token: ${{ secrets.GHCR_PAT }}
 
-      # 4) GHCR 로그인 (Actions Runner)
+      # 4) GHCR 로그인 (Actions Runner 측)
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.actor }} # 여기에는 GitHub 닉네임을 쓰시면 됩니다.
           password: ${{ secrets.GHCR_PAT }}
 
       # 5) 프론트엔드 이미지 빌드·푸시
@@ -63,8 +63,8 @@ jobs:
             ghcr.io/hc-organizations/todo-backend:latest
             ghcr.io/hc-organizations/todo-backend:${{ github.sha }}
 
-      # 7) VM에 SSH 배포
-      - name: Deploy to VM via SSH
+      # 7) VM에 SSH로 배포
+      - name: SSH deploy to VM
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VM_HOST }}
@@ -81,23 +81,17 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y git
 
-            # 2) 배포 디렉터리 준비
-            mkdir -p ~/deploy
+            # 2) 매번 깨끗하게 클론
+            rm -rf ~/deploy
+            git clone https://github.com/hc-organizations/todo-deploy.git ~/deploy
             cd ~/deploy
 
-            # 3) 리포지터리 동기화
-            if [ ! -d ".git" ]; then
-              git clone https://github.com/hc-organizations/todo-deploy.git .
-            else
-              git pull origin main
-            fi
-
-            # 4) GHCR 로그인 (non‑TTY)
+            # 3) GHCR 로그인 (non‑TTY)
             echo "$GHCR_PAT" \
               | docker login ghcr.io \
-                -u ${{ github.actor }} \
+                -u "${{ github.actor }}" \
                 --password-stdin
 
-            # 5) 이미지 Pull & Compose Up
+            # 4) Pull & 업
             docker compose pull
             docker compose up -d --no-build
