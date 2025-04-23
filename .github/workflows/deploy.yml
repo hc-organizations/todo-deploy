@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) 어떤 서비스가 업데이트됐는지 저장 (repository_dispatch or workflow_dispatch)
+      # 1) 어떤 서비스가 업데이트됐는지 저장
       - name: Set SERVICE from event
         id: set-service
         run: |
@@ -26,34 +26,42 @@ jobs:
             echo "SERVICE=${{ github.event.inputs.service }}" >> $GITHUB_ENV
           fi
 
-      # 2) SSH로 레포 동기화·.env 생성·배포
+      # 2) SSH로 레포 동기화·.env 생성·해당 서비스만 배포
       - name: Sync & Deploy via SSH
         uses: appleboy/ssh-action@v0.1.10
+        # step-level env: 이 변수가 with.envs: 에 의해 원격에도 전달됩니다
+        env:
+          SERVICE: ${{ env.SERVICE }}
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          # 원격 셸에 넘길 env 이름 목록
+          envs: |
+            SERVICE
           script: |
-            # 1) ~/deploy 경로 생성
+            # 1) ~/deploy 준비
             mkdir -p ~/deploy
+            cd ~/deploy
 
             # 2) todo-deploy 레포 클론 또는 pull
-            if [ ! -d ~/deploy/.git ]; then
-              git clone https://github.com/hc-organizations/todo-deploy.git ~/deploy
+            if [ ! -d .git ]; then
+              git clone https://github.com/hc-organizations/todo-deploy.git .
             else
-              cd ~/deploy
               git pull origin main
             fi
 
             # 3) .env 파일 덮어쓰기
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" >  ~/deploy/.env
-            echo "API_URL=${{ secrets.API_URL }}"                >> ~/deploy/.env
-            echo "DB_NAME=${{ secrets.DB_NAME }}"               >> ~/deploy/.env
-            echo "DB_USER=${{ secrets.DB_USER }}"               >> ~/deploy/.env
-            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"       >> ~/deploy/.env
-            echo "ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}" >> ~/deploy/.env
-            echo "SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}"   >> ~/deploy/.env
-            echo "DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}"       >> ~/deploy/.env
+            cat > .env <<EOF
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            API_URL=${{ secrets.API_URL }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
+            SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}
+            DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}
+            EOF
 
             # 4) 변경된 서비스만 pull & up
             cd ~/deploy
