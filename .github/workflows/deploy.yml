@@ -16,32 +16,32 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # 2) 디렉터리 준비
+            # 1) deploy 디렉터리 준비
             mkdir -p ~/deploy
             cd ~/deploy
 
-            # 3) 배포 레포 (docker-compose.yml) 클론 또는 pull
+            # 2) 배포 레포 (docker-compose.yml) 클론 또는 pull
             if [ ! -f docker-compose.yml ]; then
               git clone https://github.com/hc-organizations/todo-deploy.git .
             else
               git pull origin main
             fi
 
-            # 4) Frontend 소스 클론 또는 pull
+            # 3) Frontend 소스 클론 또는 pull
             if [ ! -d todo-frontend ]; then
               git clone https://github.com/hc-organizations/todo-frontend.git todo-frontend
             else
               cd todo-frontend && git pull origin main && cd ..
             fi
 
-            # 5) Backend 소스 클론 또는 pull
+            # 4) Backend 소스 클론 또는 pull
             if [ ! -d todo-backend ]; then
               git clone https://github.com/hc-organizations/todo-backend.git todo-backend
             else
               cd todo-backend && git pull origin main && cd ..
             fi
 
-            # 6) 환경변수 파일(.env) 생성
+            # 5) 환경변수 파일(.env) 생성
             cat > .env <<EOF
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
             API_URL=${{ secrets.API_URL }}
@@ -53,5 +53,5 @@ jobs:
             DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}
             EOF
 
-            # 7) Docker Compose로 이미지 빌드 & 배포
+            # 6) Docker Compose로 빌드 및 배포
             sudo docker compose up -d --build
