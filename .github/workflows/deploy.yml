@@ -23,28 +23,28 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # 배포 디렉터리 (원격)
-            DEPLOY_DIR="/home/${{ secrets.VM_USER }}/deploy"
+            # 1) ~/deploy 디렉터리 생성
+            mkdir -p ~/deploy
 
-            # 1) 클론 또는 pull
-            if [ ! -d "$DEPLOY_DIR" ]; then
-              git clone https://github.com/hc-organizations/todo-deploy.git "$DEPLOY_DIR"
+            # 2) todo-deploy 레포 클론 또는 pull
+            if [ ! -d ~/deploy/.git ]; then
+              git clone https://github.com/hc-organizations/todo-deploy.git ~/deploy
             else
-              cd "$DEPLOY_DIR"
+              cd ~/deploy
               git pull origin main
             fi
 
-            # 2) .env 파일 덮어쓰기
-            echo "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" >  "$DEPLOY_DIR/.env"
-            echo "API_URL=${{ secrets.API_URL }}"                >> "$DEPLOY_DIR/.env"
-            echo "DB_NAME=${{ secrets.DB_NAME }}"               >> "$DEPLOY_DIR/.env"
-            echo "DB_USER=${{ secrets.DB_USER }}"               >> "$DEPLOY_DIR/.env"
-            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"       >> "$DEPLOY_DIR/.env"
-            echo "ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}" >> "$DEPLOY_DIR/.env"
-            echo "SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}"   >> "$DEPLOY_DIR/.env"
-            echo "DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}"       >> "$DEPLOY_DIR/.env"
+            # 3) .env 파일 덮어쓰기
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" >  ~/deploy/.env
+            echo "API_URL=${{ secrets.API_URL }}"                >> ~/deploy/.env
+            echo "DB_NAME=${{ secrets.DB_NAME }}"               >> ~/deploy/.env
+            echo "DB_USER=${{ secrets.DB_USER }}"               >> ~/deploy/.env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"       >> ~/deploy/.env
+            echo "ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}" >> ~/deploy/.env
+            echo "SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}"   >> ~/deploy/.env
+            echo "DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}"       >> ~/deploy/.env
 
-            # 3) 변경된 서비스만 pull & up
-            cd "$DEPLOY_DIR"
+            # 4) 변경된 서비스만 pull & up
+            cd ~/deploy
             docker compose pull "$SERVICE"
             docker compose up -d "$SERVICE"
