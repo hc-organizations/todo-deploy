@@ -1,10 +1,6 @@
 services:
   frontend:
-    build:
-      context: ./todo-frontend
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        API_URL: ${API_URL}
+    image: ghcr.io/hc-organizations/todo-frontend:latest
     ports:
       - "3000:3000"
     environment:
@@ -15,12 +11,7 @@ services:
       - backend
 
   backend:
-    build:
-      context: ./todo-backend
-      args:
-        ASYNC_DATABASE_URL: ${ASYNC_DATABASE_URL}
-        SYNC_DATABASE_URL: ${SYNC_DATABASE_URL}
-        DB_ECHO_LOG: ${DB_ECHO_LOG}
+    image: ghcr.io/hc-organizations/todo-backend:latest
     ports:
       - "8000:8000"
     extra_hosts:
