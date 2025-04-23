@@ -44,9 +44,13 @@ jobs:
             # 6) 환경변수 파일(.env) 생성
             cat > .env <<EOF
             NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            API_URL=${{ secrets.API_URL }}
             DB_NAME=${{ secrets.DB_NAME }}
             DB_USER=${{ secrets.DB_USER }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
+            SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}
+            DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}
             EOF
 
             # 7) Docker Compose로 이미지 빌드 & 배포

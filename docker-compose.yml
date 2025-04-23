@@ -7,6 +7,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_URL: ${API_URL}
     depends_on:
       - backend
 
@@ -22,4 +23,7 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      ASYNC_DATABASE_URL: ${ASYNC_DATABASE_URL}
+      SYNC_DATABASE_URL: ${SYNC_DATABASE_URL}
+      DB_ECHO_LOG: ${DB_ECHO_LOG}
       DB_PORT: 5432
