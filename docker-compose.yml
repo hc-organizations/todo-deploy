@@ -2,6 +2,10 @@ services:
   frontend:
     build:
       context: ./todo-frontend
+      args:
+        # 이 부분을 추가해야 빌드 타임에 ARG 로 넘어갑니다
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        API_URL: ${API_URL}
     ports:
       - "3000:3000"
     environment:
@@ -14,6 +18,11 @@ services:
   backend:
     build:
       context: ./todo-backend
+      # 만약 backend 빌드 단계에서도 ARG 가 필요하다면 여기도 추가하세요
+      args:
+        ASYNC_DATABASE_URL: ${ASYNC_DATABASE_URL}
+        SYNC_DATABASE_URL: ${SYNC_DATABASE_URL}
+        DB_ECHO_LOG: ${DB_ECHO_LOG}
     ports:
       - "8000:8000"
     extra_hosts:
