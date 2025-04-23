@@ -10,23 +10,23 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      DEPLOY_DIR: /home/${{ secrets.VM_USER }}/deploy
-
     steps:
       # 1) 어떤 서비스가 업데이트됐는지 저장
       - name: Set SERVICE from dispatch payload
         run: echo "SERVICE=${{ github.event.client_payload.service }}" >> $GITHUB_ENV
 
-      # 2) VM에 SSH 접속 → 레포 동기화 & .env 덮어쓰기 & 배포
-      - name: Sync & deploy all in one via SSH
+      # 2) SSH로 레포 동기화·.env 생성·배포
+      - name: Sync & Deploy via SSH
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            # 1) deploy 디렉터리 클론 또는 pull
+            # 배포 디렉터리 (원격)
+            DEPLOY_DIR="/home/${{ secrets.VM_USER }}/deploy"
+
+            # 1) 클론 또는 pull
             if [ ! -d "$DEPLOY_DIR" ]; then
               git clone https://github.com/hc-organizations/todo-deploy.git "$DEPLOY_DIR"
             else
@@ -35,16 +35,14 @@ jobs:
             fi
 
             # 2) .env 파일 덮어쓰기
-            cat > "$DEPLOY_DIR/.env" <<EOF
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
-            API_URL=${{ secrets.API_URL }}
-            DB_NAME=${{ secrets.DB_NAME }}
-            DB_USER=${{ secrets.DB_USER }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}
-            SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}
-            DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}
-            EOF
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" >  "$DEPLOY_DIR/.env"
+            echo "API_URL=${{ secrets.API_URL }}"                >> "$DEPLOY_DIR/.env"
+            echo "DB_NAME=${{ secrets.DB_NAME }}"               >> "$DEPLOY_DIR/.env"
+            echo "DB_USER=${{ secrets.DB_USER }}"               >> "$DEPLOY_DIR/.env"
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"       >> "$DEPLOY_DIR/.env"
+            echo "ASYNC_DATABASE_URL=${{ secrets.ASYNC_DATABASE_URL }}" >> "$DEPLOY_DIR/.env"
+            echo "SYNC_DATABASE_URL=${{ secrets.SYNC_DATABASE_URL }}"   >> "$DEPLOY_DIR/.env"
+            echo "DB_ECHO_LOG=${{ secrets.DB_ECHO_LOG }}"       >> "$DEPLOY_DIR/.env"
 
             # 3) 변경된 서비스만 pull & up
             cd "$DEPLOY_DIR"
